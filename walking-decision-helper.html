@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Walking Decision Helper</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #4a5568;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+        
+        .sun-info {
+            background: #fff7ed;
+            border: 2px solid #fb923c;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 0.9em;
+        }
+        
+        .question-card {
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .question {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #2d3748;
+        }
+        
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s ease;
+            text-align: left;
+        }
+        
+        button:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+            transform: translateY(-2px);
+        }
+        
+        button.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+        
+        button.warning {
+            border-color: #fb923c;
+            background: #fff7ed;
+            color: #c2410c;
+        }
+        
+        .result {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            border-radius: 10px;
+            padding: 25px;
+            text-align: center;
+            margin-top: 20px;
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+        }
+        
+        .result h2 {
+            margin-top: 0;
+            font-size: 1.5em;
+        }
+        
+        .result.wait {
+            background: linear-gradient(135deg, #ff9800, #f57c00);
+            box-shadow: 0 5px 15px rgba(255, 152, 0, 0.3);
+        }
+        
+        .result.alternative {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            box-shadow: 0 5px 15px rgba(33, 150, 243, 0.3);
+        }
+        
+        .best-times {
+            background: #f0f4ff;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 15px;
+            color: #2d3748;
+        }
+        
+        .best-times h3 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        
+        .time-slot {
+            background: white;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 5px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .restart-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.3s ease;
+        }
+        
+        .restart-btn:hover {
+            background: #5a67d8;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .progress {
+            width: 100%;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚶‍♀️ Walking Decision Helper</h1>
+        
+        <div id="loadingDiv" class="loading">
+            <p>Getting sunset/sunrise info for Los Angeles... ☀️</p>
+        </div>
+        
+        <div id="mainContent" class="hidden">
+            <div class="sun-info" id="sunInfo">
+                <!-- Sun times will be inserted here -->
+            </div>
+            
+            <div class="progress">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            
+            <div id="questionContainer">
+                <!-- Questions will be inserted here -->
+            </div>
+            
+            <div id="result" class="hidden">
+                <!-- Result will be shown here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sunData = null;
+        let currentQuestion = 0;
+        let answers = {};
+
+        // Use reliable seasonal approximations for Los Angeles
+        function getSunData() {
+            const now = new Date();
+            const month = now.getMonth(); // 0-11 (Jan = 0, Dec = 11)
+            const day = now.getDate();
+            
+            // Seasonal sun times for Los Angeles (approximate but reliable)
+            let sunriseHour, sunriseMin, sunsetHour, sunsetMin;
+            
+            if (month === 11 || month === 0 || month === 1) { // Dec, Jan, Feb - Winter
+                sunriseHour = 6; sunriseMin = 45;
+                sunsetHour = 17; sunsetMin = 30;
+            } else if (month === 2) { // March - Spring transition
+                sunriseHour = 6; sunriseMin = 15;
+                sunsetHour = 18; sunsetMin = 15;
+            } else if (month === 3) { // April
+                sunriseHour = 6; sunriseMin = 30;
+                sunsetHour = 19; sunsetMin = 15;
+            } else if (month === 4) { // May
+                sunriseHour = 5; sunriseMin = 50;
+                sunsetHour = 19; sunsetMin = 45;
+            } else if (month === 5) { // June - Summer
+                sunriseHour = 5; sunriseMin = 45;
+                sunsetHour = 20; sunsetMin = 0;
+            } else if (month === 6) { // July - Peak summer
+                sunriseHour = 5; sunriseMin = 50;
+                sunsetHour = 20; sunsetMin = 5;
+            } else if (month === 7) { // August
+                sunriseHour = 6; sunriseMin = 15;
+                sunsetHour = 19; sunsetMin = 45;
+            } else if (month === 8) { // September
+                sunriseHour = 6; sunriseMin = 40;
+                sunsetHour = 19; sunsetMin = 0;
+            } else if (month === 9) { // October
+                sunriseHour = 7; sunriseMin = 0;
+                sunsetHour = 18; sunsetMin = 15;
+            } else { // November
+                sunriseHour = 6; sunriseMin = 30;
+                sunsetHour = 17; sunsetMin = 45;
+            }
+            
+            const sunrise = new Date(now);
+            sunrise.setHours(sunriseHour, sunriseMin, 0, 0);
+            
+            const sunset = new Date(now);
+            sunset.setHours(sunsetHour, sunsetMin, 0, 0);
+            
+            sunData = { sunrise, sunset };
+            
+            // Display sun info
+            const sunInfo = document.getElementById('sunInfo');
+            sunInfo.innerHTML = `
+                🌅 Sunrise: ~${sunrise.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'})}
+                &nbsp;&nbsp;&nbsp;
+                🌇 Sunset: ~${sunset.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'})}
+                <br><small>Approximate times for Los Angeles</small>
+            `;
+            
+            document.getElementById('loadingDiv').classList.add('hidden');
+            document.getElementById('mainContent').classList.remove('hidden');
+            renderQuestion();
+        }
+
+        const questions = [
+            {
+                id: 'when',
+                question: 'When are you planning to walk?',
+                options: [
+                    { text: 'Right now', value: 'now' },
+                    { text: 'Later today - help me find the best time', value: 'later' },
+                    { text: 'Tomorrow - help me plan ahead', value: 'tomorrow' }
+                ]
+            },
+            {
+                id: 'time',
+                question: 'What time is it right now?',
+                options: [
+                    { text: 'Early morning (before 9am)', value: 'early' },
+                    { text: 'Mid-morning (9am-11am)', value: 'mid-morning' },
+                    { text: 'Lunch time (11am-2pm)', value: 'lunch' },
+                    { text: 'Afternoon (2pm-5pm)', value: 'afternoon' },
+                    { text: 'Evening (after 5pm)', value: 'evening' }
+                ]
+            },
+            {
+                id: 'meetings',
+                question: 'Do you have meetings or calls in the next 2 hours?',
+                options: [
+                    { text: 'No meetings - totally free!', value: 'none' },
+                    { text: 'One meeting, but not for at least 90 minutes', value: 'later' },
+                    { text: 'Meeting in the next hour', value: 'soon' },
+                    { text: 'Back-to-back meetings', value: 'busy' }
+                ]
+            },
+            {
+                id: 'weather',
+                question: getWeatherQuestion,
+                options: getWeatherOptions
+            },
+            {
+                id: 'energy',
+                question: 'How\'s your energy level right now?',
+                options: [
+                    { text: 'High energy - ready to move!', value: 'high' },
+                    { text: 'Medium energy - could go either way', value: 'medium' },
+                    { text: 'Low energy - feeling tired or stressed', value: 'low' },
+                    { text: 'Just finished something intense', value: 'drained' }
+                ]
+            },
+            {
+                id: 'evening',
+                question: 'Do you have evening commitments today?',
+                options: [
+                    { text: 'Nothing planned - evening is free', value: 'free' },
+                    { text: 'Something casual that\'s flexible', value: 'flexible' },
+                    { text: 'Important evening commitment', value: 'busy' },
+                    { text: 'Not sure yet', value: 'unknown' }
+                ]
+            }
+        ];
+
+        function getWeatherQuestion() {
+            if (answers.when === 'now') {
+                const now = new Date();
+                const isEvening = now.getHours() >= 17;
+                const timeUntilSunset = sunData ? (sunData.sunset.getTime() - now.getTime()) / (1000 * 60) : null;
+                
+                if (isEvening && timeUntilSunset && timeUntilSunset < 60) {
+                    return 'How\'s the weather? ⚠️ Note: Sunset is less than an hour away!';
+                }
+            }
+            return 'How\'s the weather for walking?';
+        }
+
+        function getWeatherOptions() {
+            const baseOptions = [
+                { text: 'Perfect! Nice temperature and not too sunny', value: 'perfect' },
+                { text: 'A bit warm/sunny but manageable', value: 'warm' },
+                { text: 'Too hot, too sunny, or raining', value: 'bad' },
+                { text: 'Not sure - haven\'t checked yet', value: 'unknown' }
+            ];
+
+            if (answers.when === 'now') {
+                const now = new Date();
+                const timeUntilSunset = sunData ? (sunData.sunset.getTime() - now.getTime()) / (1000 * 60) : null;
+                
+                if (timeUntilSunset && timeUntilSunset < 60) {
+                    baseOptions.push({
+                        text: '⚠️ It will be getting dark soon - maybe wait for tomorrow',
+                        value: 'too-dark-soon',
+                        warning: true
+                    });
+                }
+            }
+
+            return baseOptions;
+        }
+
+        function renderQuestion() {
+            if (answers.when === 'later' || answers.when === 'tomorrow') {
+                // Skip some questions for planning mode
+                if (questions[currentQuestion].id === 'time' || 
+                    questions[currentQuestion].id === 'meetings' || 
+                    questions[currentQuestion].id === 'energy') {
+                    currentQuestion++;
+                    if (currentQuestion < questions.length) {
+                        renderQuestion();
+                        return;
+                    } else {
+                        showResult();
+                        return;
+                    }
+                }
+            }
+
+            const container = document.getElementById('questionContainer');
+            const question = questions[currentQuestion];
+            
+            // Update progress bar
+            const totalQuestions = answers.when === 'now' ? questions.length : 3; // Fewer questions for planning
+            const progress = ((currentQuestion + 1) / totalQuestions) * 100;
+            document.getElementById('progressBar').style.width = Math.min(progress, 100) + '%';
+            
+            const questionText = typeof question.question === 'function' ? question.question() : question.question;
+            const options = typeof question.options === 'function' ? question.options() : question.options;
+            
+            container.innerHTML = `
+                <div class="question-card">
+                    <div class="question">${questionText}</div>
+                    <div class="options">
+                        ${options.map(option => 
+                            `<button onclick="selectAnswer('${question.id}', '${option.value}')" 
+                             ${option.warning ? 'class="warning"' : ''}>${option.text}</button>`
+                        ).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function selectAnswer(questionId, value) {
+            answers[questionId] = value;
+            
+            // Visual feedback
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.classList.remove('selected'));
+            event.target.classList.add('selected');
+            
+            // Move to next question after a short delay
+            setTimeout(() => {
+                currentQuestion++;
+                if (currentQuestion < questions.length) {
+                    renderQuestion();
+                } else {
+                    showResult();
+                }
+            }, 500);
+        }
+
+        function showResult() {
+            document.getElementById('questionContainer').classList.add('hidden');
+            document.getElementById('progressBar').style.width = '100%';
+            
+            const resultDiv = document.getElementById('result');
+            const recommendation = getRecommendation();
+            
+            let resultHTML = `
+                <h2>${recommendation.title}</h2>
+                <p>${recommendation.message}</p>
+            `;
+
+            if (recommendation.bestTimes && recommendation.bestTimes.length > 0) {
+                resultHTML += `
+                    <div class="best-times">
+                        <h3>🕐 Best Walking Times${answers.when === 'tomorrow' ? ' Tomorrow' : ' Today'}:</h3>
+                        ${recommendation.bestTimes.map(time => 
+                            `<div class="time-slot">${time}</div>`
+                        ).join('')}
+                    </div>
+                `;
+            }
+
+            resultHTML += `<button class="restart-btn" onclick="restart()">Make Another Decision</button>`;
+            
+            resultDiv.innerHTML = resultHTML;
+            resultDiv.className = `result ${recommendation.type}`;
+            resultDiv.classList.remove('hidden');
+        }
+
+        function getBestWalkingTimes() {
+            if (!sunData) return [];
+            
+            const times = [];
+            const now = new Date();
+            const sunrise = sunData.sunrise;
+            const sunset = sunData.sunset;
+            
+            // Morning golden time (30 minutes to 2 hours after sunrise)
+            const morningStart = new Date(sunrise.getTime() + 30 * 60 * 1000);
+            const morningEnd = new Date(sunrise.getTime() + 120 * 60 * 1000);
+            
+            if (answers.when === 'tomorrow' || morningEnd > now) {
+                times.push(`Morning: ${morningStart.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'})} - ${morningEnd.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'})} (post-sunrise golden time)`);
+            }
+            
+            // Evening golden time (1-2 hours before sunset)
+            const eveningStart = new Date(sunset.getTime() - 120 * 60 * 1000);
+            const eveningEnd = new Date(sunset.getTime() - 60 * 60 * 1000);
+            
+            if (answers.when === 'tomorrow' || eveningStart > now) {
+                times.push(`Evening: ${eveningStart.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'})} - ${eveningEnd.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'})} (pre-sunset golden time)`);
+            }
+            
+            return times;
+        }
+
+        function getRecommendation() {
+            const { when, time, meetings, weather, energy, evening } = answers;
+            
+            // Planning mode
+            if (when === 'later' || when === 'tomorrow') {
+                const bestTimes = getBestWalkingTimes();
+                
+                if (weather === 'bad') {
+                    return {
+                        title: '🏠 Plan an Indoor Alternative',
+                        message: 'Weather isn\'t looking great for outdoor walking. Consider indoor movement during your optimal times.',
+                        type: 'alternative',
+                        bestTimes: []
+                    };
+                }
+                
+                return {
+                    title: '📅 Here\'s Your Walking Plan',
+                    message: when === 'tomorrow' ? 'These are the optimal times for tomorrow based on sunrise/sunset.' : 'Here are the best remaining times today for your walk.',
+                    type: 'go',
+                    bestTimes: bestTimes
+                };
+            }
+            
+            // Real-time decision making (when === 'now')
+            
+            // Check if it's getting too dark
+            if (weather === 'too-dark-soon') {
+                return {
+                    title: '🌙 Too Dark Soon',
+                    message: 'It\'ll be getting dark while you\'re walking. Better to wait for tomorrow morning or try some indoor movement now.',
+                    type: 'wait'
+                };
+            }
+            
+            // Bad weather = indoor alternative
+            if (weather === 'bad') {
+                return {
+                    title: '🏠 Try an Indoor Alternative',
+                    message: 'Weather isn\'t great for walking outside. How about some indoor movement? Dance to a favorite song, do some stretches, or walk around your apartment for 10 minutes.',
+                    type: 'alternative'
+                };
+            }
+            
+            // Check optimal sun timing
+            if (sunData) {
+                const now = new Date();
+                const timeSinceSunrise = (now.getTime() - sunData.sunrise.getTime()) / (1000 * 60);
+                const timeUntilSunset = (sunData.sunset.getTime() - now.getTime()) / (1000 * 60);
+                
+                const inMorningGoldenTime = timeSinceSunrise >= 30 && timeSinceSunrise <= 120;
+                const inEveningGoldenTime = timeUntilSunset >= 60 && timeUntilSunset <= 120;
+                
+                if (!inMorningGoldenTime && !inEveningGoldenTime && (weather === 'warm' || time === 'lunch' || time === 'afternoon')) {
+                    const bestTimes = getBestWalkingTimes();
+                    if (bestTimes.length > 0) {
+                        return {
+                            title: '⏰ Wait for Better Sun Timing',
+                            message: 'Not the ideal time sun-wise. You prefer walking closer to sunrise or before sunset.',
+                            type: 'wait',
+                            bestTimes: bestTimes
+                        };
+                    }
+                }
+            }
+            
+            // No time due to meetings
+            if (meetings === 'busy' || meetings === 'soon') {
+                return {
+                    title: '⏰ Wait for a Better Window',
+                    message: 'You\'re too close to meetings right now. Try again later when you have more breathing room, or consider a quick 5-minute walk around the block.',
+                    type: 'wait'
+                };
+            }
+            
+            // Very low energy
+            if (energy === 'drained') {
+                return {
+                    title: '🛋️ Rest First, Walk Later',
+                    message: 'You sound depleted right now. Take 15-20 minutes to recharge, then reassess. Sometimes a gentle walk can actually restore energy, but listen to your body.',
+                    type: 'wait'
+                };
+            }
+            
+            // Perfect conditions
+            if (weather === 'perfect' && meetings === 'none' && energy === 'high') {
+                return {
+                    title: '✨ Perfect Time to Walk!',
+                    message: 'Everything is aligned perfectly! Go for a nice 20-30 minute walk. You have time, energy, and great weather. Enjoy it!',
+                    type: 'go'
+                };
+            }
+            
+            // Good conditions with some caveats
+            if (meetings === 'none' || meetings === 'later') {
+                if (energy === 'medium' || energy === 'high') {
+                    let duration = energy === 'high' ? '20-30 minutes' : '15-20 minutes';
+                    let message = `Good time for a ${duration} walk! `;
+                    
+                    if (weather === 'warm') {
+                        message += 'It\'s a bit warm, so maybe stick to shaded areas.';
+                    } else if (weather === 'unknown') {
+                        message += 'Check the weather first, then head out if it looks good.';
+                    } else {
+                        message += 'Conditions look good - go enjoy some movement!';
+                    }
+                    
+                    return {
+                        title: '👍 Good Time to Walk',
+                        message: message,
+                        type: 'go'
+                    };
+                }
+            }
+            
+            // Evening timing considerations
+            if (time === 'evening' && evening === 'busy') {
+                const bestTimes = getBestWalkingTimes();
+                return {
+                    title: '🌅 Try Tomorrow Morning',
+                    message: 'Evening is getting busy for you. How about planning a nice morning walk tomorrow?',
+                    type: 'wait',
+                    bestTimes: bestTimes
+                };
+            }
+            
+            // Default recommendation
+            return {
+                title: '🤔 Mixed Signals - Your Call',
+                message: 'Conditions are mixed right now. Trust your gut! If you feel drawn to walk, go for a short 10-15 minute stroll. If not, try again in a couple hours.',
+                type: 'alternative'
+            };
+        }
+
+        function restart() {
+            currentQuestion = 0;
+            answers = {};
+            document.getElementById('result').classList.add('hidden');
+            document.getElementById('questionContainer').classList.remove('hidden');
+            renderQuestion();
+        }
+
+        // Start the app
+        getSunData();
+    </script>
+</body>
+</html>
